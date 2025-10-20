@@ -1,4 +1,3 @@
-
 import asyncio
 import httpx
 from aiogram import Bot, Dispatcher, Router, F
@@ -30,10 +29,10 @@ GENRES = {
 async def fetch_movies(genre: str, page: int = 1):
     params = {
         "genres.name": genre,
-        "rating.kp": "8.5-10",
+        "rating.kp": "4.5-10",          # ✅ ПОНИЖЕН ПОРОГ до 4.5!
         "type": "movie",
-        "movieLength": "70-300",
-        "votes.kp": "10000-",
+        "movieLength": "60-300",        # от 1 часа
+        "votes.kp": "1000-",            # минимум 1000 голосов (чтобы не мусор)
         "limit": 10,
         "page": page
     }
@@ -59,11 +58,13 @@ async def show_genres(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("genre_"))
 async def handle_genre(callback: CallbackQuery):
     genre = callback.data.split("_", 1)[1]
+    await callback.message.answer(f"🔍 Ищу фильмы в жанре «{genre}» с рейтингом от 4.5...")
+
     data = await fetch_movies(genre, page=1)
     movies = data.get("docs", [])
 
     if not movies:
-        await callback.message.answer("❌ Нет фильмов по этим критериям.")
+        await callback.message.answer("❌ Ничего не найдено даже с рейтингом от 4.5. Возможно, API временно недоступно.")
         return
 
     set_session(callback.from_user.id, {"genre": genre, "page": 1})
@@ -75,7 +76,8 @@ async def send_movie_list(message_or_callback, movies, page):
     for i, m in enumerate(movies, 1):
         year = m.get("year", "?")
         rating = m.get("rating", {}).get("kp", 0)
-        text += f"{i}. 🎬 *{m['name']}* ({year}) — ⭐{rating}\n"
+        name = m.get("name", "Без названия")
+        text += f"{i}. 🎬 *{name}* ({year}) — ⭐{rating}\n"
         buttons.append([InlineKeyboardButton(text=f"👁️ {i}", callback_data=f"detail_{m['id']}")])
 
     nav_buttons = []
@@ -121,7 +123,7 @@ async def show_detail(callback: CallbackQuery):
     movie_id = callback.data.split("_", 1)[1]
     headers = {"X-API-KEY": KINOPOISK_API_KEY}
     async with httpx.AsyncClient() as client:
-        r = await client.get(f"https://api.kinopoisk.dev/v1.4/movie/{movie_id}", headers=headers)
+        r = await client.get(f"https://api.kinopoisk.dev/v1.4/movie/{movie_id}", headers=headers)  # ✅ Без пробелов!
         movie = r.json() if r.status_code == 200 else None
 
     if not movie:
@@ -138,7 +140,7 @@ async def show_detail(callback: CallbackQuery):
     desc = movie.get("description") or movie.get("shortDescription", "Описание отсутствует.")
     poster = movie.get("poster", {}).get("url")
 
-    platforms = "Кинопоиск HD, IVI, More.tv"
+    platforms = "Кинопоиск HD, IVI, Okko"
     awards = "Нет данных"
 
     caption = f"""🎬 *{name}* • {year}
