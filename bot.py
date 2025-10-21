@@ -7,7 +7,9 @@ from dotenv import load_dotenv
 import os
 from session import set_session, get_session, add_to_history
 
+# Загружаем переменные окружения из .env
 load_dotenv()
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 KINOPOISK_API_KEY = os.getenv("KINOPOISK_API_KEY")
 KINOPOISK_URL = "https://api.kinopoisk.dev/v1.4/movie"
@@ -38,7 +40,7 @@ async def fetch_movies(genre: str, page: int = 1):
     }
     headers = {"X-API-KEY": KINOPOISK_API_KEY}
     
-    # 🔍 ЛОГИРУЕМ ЗАПРОС
+    # 📌 ЛОГИРУЕМ ЗАПРОС
     print(f"🔍 Запрос к API: жанр={genre}, страница={page}")
     
     async with httpx.AsyncClient() as client:
