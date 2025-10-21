@@ -59,11 +59,27 @@ async def fetch_movies(genre: str, page: int = 1):
 
 @router.message(Command("start"))
 async def start(message: Message):
+    # ✅ Новое меню с описанием
+    text = """🎬 *MyMovieRecBot* — твой личный помощник в мире кино!
+
+📌 Что я умею:
+- 🎯 Выбирать фильмы по жанру (боевик, драма, комедия и др.)
+- 📺 Показывать подробную информацию о фильме (рейтинг, описание, где смотреть)
+- 🔁 Листать списки фильмов (до 20 штук на страницу)
+- 📚 Сохранять историю просмотров
+- 🔗 Открывать ссылки на платформы (Иви, Okko, Kinopoisk HD)
+
+👉 Начни с выбора жанра или посмотри историю.
+
+Список команд:
+/start — перезапустить бота
+/history — посмотреть историю просмотров"""
+
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎯 Выбрать жанр", callback_data="genres")],
         [InlineKeyboardButton(text="🕒 История", callback_data="history")]
     ])
-    await message.answer("🎬 Привет! Выбери жанр или посмотри историю.", reply_markup=kb)
+    await message.answer(text, parse_mode="Markdown", reply_markup=kb)
 
 @router.callback_query(F.data == "genres")
 async def show_genres(callback: CallbackQuery):
@@ -100,8 +116,9 @@ async def send_movie_list(message_or_callback, movies, page, start_index):
         rating = m.get("rating", {}).get("kp", 0)
         name = m.get("name", "Без названия")
         # ✅ Нумерация сквозная: start_index + i
+        # ✅ Кнопка содержит номер и название фильма
         text += f"{start_index + i}. 🎬 *{name}* ({year}) — ⭐{rating}\n"
-        buttons.append([InlineKeyboardButton(text=f"👁️ {start_index + i}", callback_data=f"detail_{m['id']}")])
+        buttons.append([InlineKeyboardButton(text=f"👁️ {start_index + i}. {name}", callback_data=f"detail_{m['id']}")])
 
     nav_buttons = []
     if page > 1:
@@ -235,7 +252,7 @@ async def show_history(callback: CallbackQuery):
     if not history:
         await callback.message.answer("🕗 История пуста.")
         return
-    text = "🕗 Твоя история:\n\n"
+    text = "ughs Твоя история:\n\n"
     for m in history[-5:]:
         text += f"• 🎬 {m['name']} ({m.get('year', '?')})\n"
     await callback.message.answer(text)
