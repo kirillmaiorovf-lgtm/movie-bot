@@ -10,7 +10,7 @@ from session import set_session, get_session, add_to_history
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 KINOPOISK_API_KEY = os.getenv("KINOPOISK_API_KEY")
-KINOPOISK_URL = "https://api.kinopoisk.dev/v1.4/movie"  # ← НЕТ ПРОБЕЛОВ!
+KINOPOISK_URL = "https://api.kinopoisk.dev/v1.4/movie"
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -37,9 +37,25 @@ async def fetch_movies(genre: str, page: int = 1):
         "page": page
     }
     headers = {"X-API-KEY": KINOPOISK_API_KEY}
+    
+    # 🔍 ЛОГИРУЕМ ЗАПРОС
+    print(f"🔍 Запрос к API: жанр={genre}, страница={page}")
+    
     async with httpx.AsyncClient() as client:
         r = await client.get(KINOPOISK_URL, params=params, headers=headers)
-        return r.json() if r.status_code == 200 else {"docs": [], "pages": 0}
+        print(f"📡 Статус ответа: {r.status_code}")
+        
+        if r.status_code != 200:
+            print(f"❌ Ошибка API: {r.text}")
+            return {"docs": [], "pages": 0}
+        
+        try:
+            data = r.json()
+            print(f"✅ Получено фильмов: {len(data.get('docs', []))}")
+            return data
+        except Exception as e:
+            print(f"❌ Ошибка парсинга JSON: {e}")
+            return {"docs": [], "pages": 0}
 
 @router.message(Command("start"))
 async def start(message: Message):
@@ -51,7 +67,8 @@ async def start(message: Message):
 
 @router.callback_query(F.data == "genres")
 async def show_genres(callback: CallbackQuery):
-    buttons = [[InlineKeyboardButton(text=name, callback_data=f"genre_{eng}")] for name, eng in GENRES.items()]
+    # ✅ ПРАВИЛЬНАЯ СТРУКТУРА: список кнопок → группировка по 2
+    buttons = [InlineKeyboardButton(text=name, callback_data=f"genre_{eng}") for name, eng in GENRES.items()]
     rows = [buttons[i:i+2] for i in range(0, len(buttons), 2)]
     await callback.message.edit_text("Выбери жанр:", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
@@ -123,7 +140,7 @@ async def show_detail(callback: CallbackQuery):
     movie_id = callback.data.split("_", 1)[1]
     headers = {"X-API-KEY": KINOPOISK_API_KEY}
     async with httpx.AsyncClient() as client:
-        r = await client.get(f"https://api.kinopoisk.dev/v1.4/movie/{movie_id}", headers=headers)  # ← НЕТ ПРОБЕЛОВ!
+        r = await client.get(f"https://api.kinopoisk.dev/v1.4/movie/{movie_id}", headers=headers)
         movie = r.json() if r.status_code == 200 else None
 
     if not movie:
