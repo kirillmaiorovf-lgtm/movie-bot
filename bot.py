@@ -31,15 +31,14 @@ GENRES = {
 async def fetch_movies(genre: str, page: int = 1):
     params = {
         "genres.name": genre,
-        "rating.kp": "4.0-10",   # ✅ Понижен порог для большего охвата
+        "rating.kp": "4.0-10",
         "type": "movie",
         "movieLength": "60-300",
-        "limit": 20,             # ✅ Увеличен лимит
+        "limit": 20,
         "page": page
     }
     headers = {"X-API-KEY": KINOPOISK_API_KEY}
     
-    # 📌 ЛОГИРУЕМ ЗАПРОС
     print(f"🔍 Запрос к API: жанр={genre}, страница={page}")
     
     async with httpx.AsyncClient() as client:
@@ -68,7 +67,6 @@ async def start(message: Message):
 
 @router.callback_query(F.data == "genres")
 async def show_genres(callback: CallbackQuery):
-    # ✅ ПРАВИЛЬНАЯ СТРУКТУРА: список кнопок → группировка по 2
     buttons = [InlineKeyboardButton(text=name, callback_data=f"genre_{eng}") for name, eng in GENRES.items()]
     rows = [buttons[i:i+2] for i in range(0, len(buttons), 2)]
     await callback.message.edit_text("Выбери жанр:", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
@@ -85,18 +83,25 @@ async def handle_genre(callback: CallbackQuery):
         await callback.message.answer("❌ Ничего не найдено даже с рейтингом от 4.0.")
         return
 
-    set_session(callback.from_user.id, {"genre": genre, "page": 1})
-    await send_movie_list(callback.message, movies, 1)
+    # ✅ Сохраняем начальную страницу и общее количество фильмов
+    set_session(callback.from_user.id, {
+        "genre": genre,
+        "page": 1,
+        "total_movies": len(movies),
+        "start_index": 0  # Индекс первого фильма на текущей странице
+    })
+    await send_movie_list(callback.message, movies, 1, 0)  # Передаём start_index=0
 
-async def send_movie_list(message_or_callback, movies, page):
+async def send_movie_list(message_or_callback, movies, page, start_index):
     text = f"🔍 Страница {page}\n\n"
     buttons = []
     for i, m in enumerate(movies, 1):
         year = m.get("year", "?")
         rating = m.get("rating", {}).get("kp", 0)
         name = m.get("name", "Без названия")
-        text += f"{i}. 🎬 *{name}* ({year}) — ⭐{rating}\n"
-        buttons.append([InlineKeyboardButton(text=f"👁️ {i}", callback_data=f"detail_{m['id']}")])
+        # ✅ Нумерация сквозная: start_index + i
+        text += f"{start_index + i}. 🎬 *{name}* ({year}) — ⭐{rating}\n"
+        buttons.append([InlineKeyboardButton(text=f"👁️ {start_index + i}", callback_data=f"detail_{m['id']}")])
 
     nav_buttons = []
     if page > 1:
@@ -121,8 +126,15 @@ async def next_page(callback: CallbackQuery):
     if not movies:
         await callback.answer("Больше фильмов нет.", show_alert=True)
         return
-    set_session(callback.from_user.id, {"genre": session["genre"], "page": new_page})
-    await send_movie_list(callback, movies, new_page)
+    # ✅ Обновляем индекс начала списка
+    start_index = session.get("start_index", 0) + 20
+    set_session(callback.from_user.id, {
+        "genre": session["genre"],
+        "page": new_page,
+        "total_movies": len(movies),
+        "start_index": start_index
+    })
+    await send_movie_list(callback, movies, new_page, start_index)
 
 @router.callback_query(F.data == "prev_page")
 async def prev_page(callback: CallbackQuery):
@@ -133,8 +145,15 @@ async def prev_page(callback: CallbackQuery):
     new_page = session["page"] - 1
     data = await fetch_movies(session["genre"], page=new_page)
     movies = data.get("docs", [])
-    set_session(callback.from_user.id, {"genre": session["genre"], "page": new_page})
-    await send_movie_list(callback, movies, new_page)
+    # ✅ Уменьшаем индекс начала списка
+    start_index = session.get("start_index", 0) - 20
+    set_session(callback.from_user.id, {
+        "genre": session["genre"],
+        "page": new_page,
+        "total_movies": len(movies),
+        "start_index": start_index
+    })
+    await send_movie_list(callback, movies, new_page, start_index)
 
 @router.callback_query(F.data.startswith("detail_"))
 async def show_detail(callback: CallbackQuery):
@@ -158,21 +177,33 @@ async def show_detail(callback: CallbackQuery):
     desc = movie.get("description") or movie.get("shortDescription", "Описание отсутствует.")
     poster = movie.get("poster", {}).get("url")
 
-    platforms = "Кинопоиск HD, IVI, Okko"
-    awards = "Нет данных"
+    # ✅ Собираем ссылки на платформы
+    platforms = ""
+    watchability = movie.get("watchability", {})
+    if watchability and "items" in watchability:
+        for item in watchability["items"]:
+            name = item.get("name", "")
+            url = item.get("url", "")
+            if name and url:
+                platforms += f"[{name}]({url})\n"
+
+    # ✅ Ссылка на фильм на Kinopoisk
+    kp_url = f"https://www.kinopoisk.ru/film/{movie_id}/"
 
     caption = f"""🎬 *{name}* • {year}
 ⭐ {rating} | ⏳ {runtime} мин | 🎯 {genres}
 
 📌 {desc}
 
-🏆 Награды: {awards}
-🌐 Где смотреть: {platforms}
+🏆 Награды: Нет данных
+🌐 Где смотреть:
+{platforms}
+🔗 [Смотреть на Kinopoisk]({kp_url})
 """
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Это он", callback_data="selected")],
-        [InlineKeyboardButton(text="⬅️ Назад к списку", callback_data="back_to_list")]  # ✅ ИСПРАВЛЕНО: callback_data="back_to_list"
+        [InlineKeyboardButton(text="⬅️ Назад к списку", callback_data="back_to_list")]
     ])
 
     if poster:
@@ -184,7 +215,7 @@ async def show_detail(callback: CallbackQuery):
 async def selected(callback: CallbackQuery):
     await callback.message.answer("✅ Отличный выбор! Фильм сохранён в историю.")
 
-@router.callback_query(F.data == "back_to_list")  # ✅ ИСПРАВЛЕНО: обработчик для кнопки "Назад к списку"
+@router.callback_query(F.data == "back_to_list")
 async def back_to_list(callback: CallbackQuery):
     session = get_session(callback.from_user.id)
     if not session:
@@ -192,9 +223,10 @@ async def back_to_list(callback: CallbackQuery):
         return
     genre = session["genre"]
     page = session["page"]
+    start_index = session.get("start_index", 0)
     data = await fetch_movies(genre, page=page)
     movies = data.get("docs", [])
-    await send_movie_list(callback.message, movies, page)
+    await send_movie_list(callback.message, movies, page, start_index)
 
 @router.callback_query(F.data == "history")
 async def show_history(callback: CallbackQuery):
