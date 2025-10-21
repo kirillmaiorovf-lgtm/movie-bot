@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN") or "8306127980:AAHGXcF1rA-Sg0ACbvG6j3i5diOBUDCQBjI"
-KINOPOISK_API_KEY = os.getenv("KINOPOISK_API_KEY") or "FB86TF8-K4V4FTQ-NQ8J2SY-7P6WV49"
+KINOPOISK_API_KEY = os.getenv("KINOPOISK_API_KEY") or "E6XED3B-W1V4X10-K70S8ZP-42YE6YS"  # ← замени на свой, если нужно
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher(bot)
@@ -38,16 +38,15 @@ GENRES = [
     "фантастика", "фэнтези", "церемония"
 ]
 
-# === ✅ ИСПРАВЛЕНА: правильная клавиатура ===
+# === Клавиатура жанров ===
 def get_genre_keyboard():
     buttons = []
     for genre in GENRES:
         buttons.append(InlineKeyboardButton(text=genre.capitalize(), callback_data=f"genre_{genre}"))
-    # Разбиваем на ряды по 3 кнопки
     rows = [buttons[i:i + 3] for i in range(0, len(buttons), 3)]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
-# === Вспомогательные функции ===
+# === Сессии ===
 def get_session(user_id):
     sessions = load_json(SESSIONS_FILE)
     return sessions.get(str(user_id))
@@ -73,9 +72,13 @@ def add_to_history(user_id, movie):
         history[user_key].append(entry)
     save_json(HISTORY_FILE, history)
 
+# === Запрос к API ===
 async def fetch_movies(genre: str, page: int = 1):
-    url = "https://api.kinopoisk.dev/v1/movie"
-    headers = {"X-API-KEY": KINOPOISK_API_KEY}
+    url = "https://api.kinopoisk.dev/v2.2/movie"
+    headers = {
+        "X-API-KEY": KINOPOISK_API_KEY,
+        "User-Agent": "MovieBot/1.0 (Telegram Bot)"
+    }
     params = {
         "genres.name": genre,
         "page": page,
@@ -85,9 +88,18 @@ async def fetch_movies(genre: str, page: int = 1):
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.get(url, headers=headers, params=params)
         print(f"🔍 Запрос: жанр={genre}, страница={page} → Статус: {r.status_code}")
-        return r.json() if r.status_code == 200 else {"docs": []}
+        try:
+            return r.json() if r.status_code == 200 else {"docs": []}
+        except Exception as e:
+            print(f"❌ Ошибка парсинга JSON: {e}")
+            print(f"📡 Ответ: {r.text[:200]}")
+            return {"docs": []}
 
 async def send_movie_list(message, movies, page, start_index=1):
+    if not movies:
+        await message.answer("❌ Ничего не найдено.")
+        return
+
     text = f"🔍 Страница {page}\n\n"
     buttons = []
     for i, m in enumerate(movies, start=start_index):
@@ -178,10 +190,16 @@ async def prev_page(callback: types.CallbackQuery):
 async def show_detail(callback: types.CallbackQuery):
     await callback.answer()
     movie_id = callback.data.split("_", 1)[1]
-    headers = {"X-API-KEY": KINOPOISK_API_KEY}
+    headers = {
+        "X-API-KEY": KINOPOISK_API_KEY,
+        "User-Agent": "MovieBot/1.0 (Telegram Bot)"
+    }
     async with httpx.AsyncClient() as client:
-        r = await client.get(f"https://api.kinopoisk.dev/v1/movie/{movie_id}", headers=headers)
-        movie = r.json() if r.status_code == 200 else None
+        r = await client.get(f"https://api.kinopoisk.dev/v2.2/movie/{movie_id}", headers=headers)
+        try:
+            movie = r.json() if r.status_code == 200 else None
+        except:
+            movie = None
 
     if not movie:
         await callback.message.answer("Фильм не найден.")
