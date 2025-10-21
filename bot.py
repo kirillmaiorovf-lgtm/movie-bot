@@ -34,7 +34,7 @@ async def fetch_movies(genre: str, page: int = 1):
         "rating.kp": "4.5-10",
         "type": "movie",
         "movieLength": "60-300",
-        "votes.kp": "1000-",
+        "votes.kp": 1000,  # ✅ ИСПРАВЛЕНО: число, а не строка!
         "limit": 10,
         "page": page
     }
@@ -192,7 +192,7 @@ async def show_history(callback: CallbackQuery):
     if not history:
         await callback.message.answer("🕗 История пуста.")
         return
-    text = "🕗 Твоя история:\n\n"
+    text = " Твоя история:\n\n"
     for m in history[-5:]:
         text += f"• 🎬 {m['name']} ({m.get('year', '?')})\n"
     await callback.message.answer(text)
