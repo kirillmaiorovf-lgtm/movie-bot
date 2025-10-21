@@ -3,7 +3,6 @@ import json
 from pathlib import Path
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils.callback_data import CallbackData
 import httpx
 
 # === Загрузка переменных ===
@@ -39,16 +38,16 @@ GENRES = [
     "фантастика", "фэнтези", "церемония"
 ]
 
-# === Вспомогательные функции ===
+# === ✅ ИСПРАВЛЕНА: правильная клавиатура ===
 def get_genre_keyboard():
-    buttons = [
-        [InlineKeyboardButton(text=g.capitalize(), callback_data=f"genre_{g}")]
-        for g in GENRES
-    ]
-    # 3 кнопки в ряд
-    rows = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
+    buttons = []
+    for genre in GENRES:
+        buttons.append(InlineKeyboardButton(text=genre.capitalize(), callback_data=f"genre_{genre}"))
+    # Разбиваем на ряды по 3 кнопки
+    rows = [buttons[i:i + 3] for i in range(0, len(buttons), 3)]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
+# === Вспомогательные функции ===
 def get_session(user_id):
     sessions = load_json(SESSIONS_FILE)
     return sessions.get(str(user_id))
@@ -63,7 +62,6 @@ def add_to_history(user_id, movie):
     user_key = str(user_id)
     if user_key not in history:
         history[user_key] = []
-    # Сохраняем только нужные поля
     entry = {
         "id": movie.get("id"),
         "name": movie.get("name"),
@@ -105,7 +103,11 @@ async def send_movie_list(message, movies, page, start_index=1):
     nav.append(InlineKeyboardButton(text="⏭️ Другие варианты", callback_data="next_page"))
     buttons.append(nav)
 
-    await message.answer(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+    await message.answer(
+        text,
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+    )
 
 # === Обработчики ===
 @dp.message_handler(commands=["start"])
@@ -195,7 +197,6 @@ async def show_detail(callback: types.CallbackQuery):
     desc = (movie.get("description") or movie.get("shortDescription") or "Описание отсутствует.")[:400] + "..."
     poster = movie.get("poster", {}).get("url") or "https://via.placeholder.com/300x450?text=No+Poster"
 
-    # Ссылки на платформы
     kp_id = movie.get("id", "")
     kinopoisk_url = f"https://www.kinopoisk.ru/film/{kp_id}/"
     ivi_url = f"https://www.ivi.ru/search/?q={name.replace(' ', '+')}"
