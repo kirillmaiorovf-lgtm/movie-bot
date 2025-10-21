@@ -9,8 +9,8 @@ from session import set_session, get_session, add_to_history
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-KINOPOISK_API_KEY = "FB86TF8-K4V4FTQ-NQ8J2SY-7P6WV49"
-KINOPOISK_URL = "https://api.kinopoisk.dev/v1.4/movie"
+KINOPOISK_API_KEY = os.getenv("KINOPOISK_API_KEY")
+KINOPOISK_URL = "https://api.kinopoisk.dev/v1.4/movie"  # ← НЕТ ПРОБЕЛОВ!
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -29,10 +29,10 @@ GENRES = {
 async def fetch_movies(genre: str, page: int = 1):
     params = {
         "genres.name": genre,
-        "rating.kp": "4.5-10",          # ✅ ПОНИЖЕН ПОРОГ до 4.5!
+        "rating.kp": "4.5-10",
         "type": "movie",
-        "movieLength": "60-300",        # от 1 часа
-        "votes.kp": "1000-",            # минимум 1000 голосов (чтобы не мусор)
+        "movieLength": "60-300",
+        "votes.kp": "1000-",
         "limit": 10,
         "page": page
     }
@@ -64,7 +64,7 @@ async def handle_genre(callback: CallbackQuery):
     movies = data.get("docs", [])
 
     if not movies:
-        await callback.message.answer("❌ Ничего не найдено даже с рейтингом от 4.5. Возможно, API временно недоступно.")
+        await callback.message.answer("❌ Ничего не найдено даже с рейтингом от 4.5.")
         return
 
     set_session(callback.from_user.id, {"genre": genre, "page": 1})
@@ -123,7 +123,7 @@ async def show_detail(callback: CallbackQuery):
     movie_id = callback.data.split("_", 1)[1]
     headers = {"X-API-KEY": KINOPOISK_API_KEY}
     async with httpx.AsyncClient() as client:
-        r = await client.get(f"https://api.kinopoisk.dev/v1.4/movie/{movie_id}", headers=headers)  # ✅ Без пробелов!
+        r = await client.get(f"https://api.kinopoisk.dev/v1.4/movie/{movie_id}", headers=headers)  # ← НЕТ ПРОБЕЛОВ!
         movie = r.json() if r.status_code == 200 else None
 
     if not movie:
